@@ -25,7 +25,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v4
         with:
-          images: journey0ad/bitmagnet-next-web
+          images: kl3x/bitmagnet-next-web
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
