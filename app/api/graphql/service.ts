@@ -110,6 +110,9 @@ const buildSizeFilter = (filterSize: keyof typeof sizeFilterMap) => {
 };
 
 const QUOTED_KEYWORD_REGEX = /"([^"]+)"/g;
+const SLASH_REGEX = /^\/(.+)\/$/;
+
+// 处理被斜杠包围的关键词的原始处理逻辑
 const extractKeywords = (
   keyword: string,
 ): { keyword: string; required: boolean }[] => {
@@ -159,6 +162,22 @@ const extractKeywords = (
   return keywords;
 };
 
+// 新增：简单的空格分割处理，所有关键词都是必须匹配的
+const simpleKeywordSplit = (
+  keyword: string,
+): { keyword: string; required: boolean }[] => {
+  // 按空格分割关键词
+  const splitKeywords = keyword.trim().split(/\s+/).filter(k => k.length >= 2);
+  
+  // 如果没有分割出关键词，返回原始关键词
+  if (splitKeywords.length === 0 && keyword.trim().length >= 2) {
+    return [{ keyword: keyword.trim(), required: true }];
+  }
+  
+  // 所有分割后的关键词都设置为必须匹配
+  return splitKeywords.map(k => ({ keyword: k, required: true }));
+};
+
 export async function search(_: any, { queryInput }: any) {
   try {
     console.info("-".repeat(50));
@@ -201,7 +220,17 @@ export async function search(_: any, { queryInput }: any) {
     const timeFilter = buildTimeFilter(queryInput.filterTime);
     const sizeFilter = buildSizeFilter(queryInput.filterSize);
 
-    const keywords = extractKeywords(queryInput.keyword);
+    // 检查关键词是否被斜杠包围
+    const slashMatch = SLASH_REGEX.exec(queryInput.keyword);
+    let keywords;
+    
+    if (slashMatch) {
+      // 如果被斜杠包围，使用原始处理逻辑
+      keywords = extractKeywords(slashMatch[1]);
+    } else {
+      // 否则使用简单空格分割，所有关键词都是必须匹配的
+      keywords = simpleKeywordSplit(queryInput.keyword);
+    }
 
     // Construct the keyword filter condition
     const requiredKeywords: string[] = [];
@@ -307,9 +336,16 @@ FROM (
       queryArr.push(Promise.resolve({ rows: [{ total: 0 }] }) as any);
     }
 
+    // 记录查询开始时间
+    const queryStartTime = performance.now();
+    
     // Execute queries and process results
     const [{ rows: torrentsResp }, { rows: countResp }] =
       await Promise.all(queryArr);
+    
+    // 计算并打印查询耗时
+    const queryEndTime = performance.now();
+    console.info(`SQL查询耗时: ${(queryEndTime - queryStartTime).toFixed(2)}ms`);
 
     const torrents = torrentsResp.map(formatTorrent);
     const total_count = countResp[0].total;
@@ -349,6 +385,9 @@ GROUP BY t.info_hash, t.name, t.size, t.created_at, t.updated_at, t.files_count;
     `;
 
     const params = [hash];
+    
+    // 记录SQL查询
+    console.debug("SQL:", sql, params);
 
     const { rows } = await query(sql, params);
     const torrent = rows[0];
@@ -379,7 +418,7 @@ latest_torrent AS (
     ORDER BY created_at DESC
     LIMIT 1
 )
-SELECT 
+SELECT
   db_size.size,
   latest_torrent.created_at as updated_at,
   torrent_count.total_count,
@@ -391,13 +430,23 @@ SELECT
     'created_at', latest_torrent.created_at,
     'updated_at', latest_torrent.updated_at
   ) AS latest_torrent
-FROM 
+FROM
   db_size,
   torrent_count,
   latest_torrent;
     `;
 
+    // 记录SQL查询
+    console.debug("SQL:", sql, []);
+
+    // 记录查询开始时间
+    const queryStartTime = performance.now();
+    
     const { rows } = await query(sql, []);
+    
+    // 计算并打印查询耗时
+    const queryEndTime = performance.now();
+    console.info(`statsInfo查询耗时: ${(queryEndTime - queryStartTime).toFixed(2)}ms`);
     const data = rows[0];
 
     if (!data) {
