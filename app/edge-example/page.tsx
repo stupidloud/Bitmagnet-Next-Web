@@ -1,19 +1,19 @@
 import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 
-export const runtime = 'edge';
+// 由于项目中的一些依赖与 Edge Runtime 不兼容，移除 Edge Runtime 标记
 
 export default async function EdgeExamplePage() {
   const t = await getTranslations();
-  
+
   return (
     <div className="flex flex-col items-center justify-center gap-4 w-4/5 md:w-3/5 h-full mx-auto pb-24 md:pb-20">
       <h1 className="text-3xl font-bold mb-4">Edge Runtime Example</h1>
-      
+
       <p className="text-center mb-6">
         This page is running on Edge Runtime, which provides faster performance and global distribution.
       </p>
-      
+
       <div className="flex flex-col gap-4 w-full max-w-md">
         <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-800">
           <h2 className="text-xl font-semibold mb-2">Edge Runtime Benefits</h2>
@@ -24,7 +24,7 @@ export default async function EdgeExamplePage() {
             <li>Automatic scaling</li>
           </ul>
         </div>
-        
+
         <div className="p-4 border rounded-lg bg-gray-50 dark:bg-gray-800">
           <h2 className="text-xl font-semibold mb-2">Current Time</h2>
           <p>{new Date().toLocaleString()}</p>
@@ -33,9 +33,9 @@ export default async function EdgeExamplePage() {
           </p>
         </div>
       </div>
-      
+
       <div className="mt-8">
-        <Link 
+        <Link
           href="/"
           className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 transition-colors"
         >

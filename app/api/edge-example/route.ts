@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 
-export const runtime = 'edge';
+// 由于项目中的一些依赖与 Edge Runtime 不兼容，移除 Edge Runtime 标记
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const name = searchParams.get('name') || 'World';
-  
+
   return NextResponse.json(
     {
       message: `Hello, ${name}!`,

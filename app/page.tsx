@@ -5,8 +5,7 @@ import { ToggleTheme, SwitchLanguage } from "@/components/FloatTool";
 import { Stats } from "@/components/Stats";
 import { headers } from "next/headers";
 
-// 标记为Edge Runtime
-export const runtime = 'edge';
+// 由于 NextUI 组件与 Edge Runtime 不兼容，移除 Edge Runtime 标记
 
 // 生成元数据并设置缓存控制头
 export async function generateMetadata(): Promise<Metadata> {
