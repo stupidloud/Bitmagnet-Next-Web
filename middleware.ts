@@ -17,6 +17,10 @@ export function middleware(request: NextRequest) {
 
     return response;
   }
+  else if (request.nextUrl.pathname === '/middleware-test') {
+    // 对于/middleware-test路径，不设置任何头
+    return 'hello cached world';
+  }
 
   // 对于其他路径，不做任何修改
   return NextResponse.next();
