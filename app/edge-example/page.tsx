@@ -1,11 +1,7 @@
-import { getTranslations } from "next-intl/server";
 import Link from "next/link";
 
-// 由于项目中的一些依赖与 Edge Runtime 不兼容，移除 Edge Runtime 标记
-
 export default async function EdgeExamplePage() {
-  const t = await getTranslations();
-
+  // 完全移除翻译逻辑，使页面可以静态生成
   return (
     <div className="flex flex-col items-center justify-center gap-4 w-4/5 md:w-3/5 h-full mx-auto pb-24 md:pb-20">
       <h1 className="text-3xl font-bold mb-4">Edge Runtime Example</h1>
