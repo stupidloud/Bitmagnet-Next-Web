@@ -1,6 +1,8 @@
 import { Metadata } from "next";
 import { notFound } from "next/navigation";
 
+export const runtime = "edge";
+
 import { base64ToHex, getLinkInfoFromWhatsLink } from "@/utils";
 import apiFetch from "@/utils/api";
 import { DetailContent } from "@/components/DetailContent";

@@ -2,6 +2,8 @@ import { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { Link } from "@nextui-org/react";
 
+export const runtime = "edge";
+
 import { SearchInput } from "@/components/SearchInput";
 import SearchResultsList from "@/components/SearchResultsList";
 import apiFetch from "@/utils/api";
