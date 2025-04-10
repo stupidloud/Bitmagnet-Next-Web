@@ -36,5 +36,5 @@ export function middleware(request: NextRequest) {
 
 // 配置中间件处理的路径
 export const config = {
-  matcher: ['/', '/edge-example'],
+  matcher: ['/'],
 };
