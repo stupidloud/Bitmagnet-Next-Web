@@ -18,15 +18,9 @@ export function middleware(request: NextRequest) {
     return response;
   }
   else if (request.nextUrl.pathname === '/middleware-test') {
-    // 创建一个新的响应，只包含简单的文本
-    return new NextResponse("Hello Cached World", {
-      status: 200,
-      headers: {
-        'Content-Type': 'text/plain; charset=utf-8',
-        'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
-        'X-Middleware-Cache': 'true'
-      }
-    });
+
+    return NextResponse.rewrite(request.nextUrl);
+    
   }
 
   // 对于其他路径，不做任何修改
