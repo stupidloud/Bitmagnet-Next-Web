@@ -3,10 +3,6 @@ import { SearchInput } from "@/components/SearchInput";
 import { ToggleTheme, SwitchLanguage } from "@/components/FloatTool";
 import { Stats } from "@/components/Stats";
 
-// 启用静态生成，缓存首页
-export const dynamic = 'force-static';
-export const revalidate = 600; // 10分钟后重新验证
-
 export default function Home() {
   return (
     <section className="flex flex-col items-center justify-center gap-4 w-4/5 md:w-3/5 h-full mx-auto pb-24 md:pb-20">

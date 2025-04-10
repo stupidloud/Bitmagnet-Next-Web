@@ -19,6 +19,9 @@ export function middleware(request: NextRequest) {
     response.headers.set('CDN-Cache-Control', 's-maxage=3600'); // 专门针对Vercel CDN
     response.headers.set('Vercel-CDN-Cache-Control', 'max-age=3600'); // Vercel Edge Network特定头
     
+    // 添加Vary头，确保为不同语言缓存不同版本
+    response.headers.set('Vary', 'Cookie, Accept-Language');
+    
     // 设置自定义头以验证中间件是否生效
     response.headers.set('X-Middleware-Cache', 'true');
 
