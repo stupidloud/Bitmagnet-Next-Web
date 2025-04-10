@@ -1,47 +1,46 @@
-"use client";
-
-import { useEffect, useState } from "react";
-import { Tooltip, Spinner } from "@nextui-org/react";
-import { useTranslations } from "next-intl";
+import { Suspense } from "react";
+import { getTranslations } from "next-intl/server";
+import { Button } from "@vercel/examples-ui";
 
 import apiFetch from "@/utils/api";
 import { InfoFilledIcon } from "@/components/icons";
 import { formatByteSize, formatDate } from "@/utils";
 
-// 定义Stats数据类型
-interface StatsData {
-  size: number;
-  total_count: number;
-  updated_at: string | number; // 可以是字符串或数字
+// 简单的兼容 Edge Runtime 的 Spinner 组件
+function SimpleSpinner() {
+  return (
+    <div className="flex justify-center items-center p-2">
+      <div className="animate-spin h-4 w-4 border-2 border-gray-500 rounded-full border-t-transparent"></div>
+    </div>
+  );
 }
 
-function StatsCard() {
-  const t = useTranslations();
-  const [data, setData] = useState<StatsData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+// 简单的兼容 Edge Runtime 的 Tooltip 组件
+function SimpleTooltip({
+  children,
+  content,
+  className = ""
+}: {
+  children: React.ReactNode;
+  content: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className="group relative inline-block">
+      {children}
+      <div className={`invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-full mb-2 p-2 bg-gray-800 bg-opacity-60 text-white text-xs rounded-md shadow-lg z-50 ${className}`}>
+        {content}
+      </div>
+    </div>
+  );
+}
 
-  useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const response = await apiFetch("/api/stats");
-        setData(response.data);
-      } catch (error) {
-        console.error("Failed to fetch stats:", error);
-      } finally {
-        setIsLoading(false);
-      }
-    };
+async function StatsCard() {
+  const t = await getTranslations();
 
-    fetchStats();
-  }, []);
-
-  if (isLoading) {
-    return <Spinner size="sm" />;
-  }
-
-  if (!data) {
-    return <div className="text-xs text-foreground-600">{t("Stats.error")}</div>;
-  }
+  const { data } = await apiFetch("/api/stats", {
+    next: { revalidate: 60 },
+  });
 
   return (
     <div className="text-xs text-foreground-600">
@@ -56,9 +55,7 @@ function StatsCard() {
         <li>
           {t("Stats.updated_at", {
             updated_at: formatDate(
-              typeof data.updated_at === 'string'
-                ? parseInt(data.updated_at, 10)
-                : data.updated_at, // 根据类型进行适当转换
+              data.updated_at,
               t("COMMON.DATE_FORMAT_SHORT"),
             ),
           })}
@@ -70,16 +67,15 @@ function StatsCard() {
 
 export function Stats() {
   return (
-    <Tooltip
-      classNames={{
-        content: "bg-opacity-60",
-      }}
-      closeDelay={0}
-      content={<StatsCard />}
-      delay={0}
-      radius="sm"
+    <SimpleTooltip
+      className="min-w-[200px]"
+      content={
+        <Suspense fallback={<SimpleSpinner />}>
+          <StatsCard />
+        </Suspense>
+      }
     >
       <InfoFilledIcon className="cursor-pointer text-gray-500" size={15} />
-    </Tooltip>
+    </SimpleTooltip>
   );
 }
