@@ -3,6 +3,9 @@ import { SearchInput } from "@/components/SearchInput";
 import { ToggleTheme, SwitchLanguage } from "@/components/FloatTool";
 import { Stats } from "@/components/Stats";
 
+// 启用静态生成，缓存首页
+export const dynamic = 'force-static';
+export const revalidate = 600; // 10分钟后重新验证
 
 export default function Home() {
   return (
