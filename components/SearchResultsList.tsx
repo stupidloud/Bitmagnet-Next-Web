@@ -92,6 +92,7 @@ export default function SearchResultsList({
               searchOption[key as keyof typeof searchOption],
             ]}
             label={t(`Search.filterLabel.${key}`)}
+            labelPlacement="outside" // 将标签放在选择框外部（上方）
             popoverProps={{
               className: "w-full flex justify-center",
               classNames: {
