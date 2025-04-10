@@ -1,8 +1,6 @@
 import Link from "next/link";
 
-export const config = {
-  runtime: "edge",
-};
+export const runtime = "edge"
 
 export default function EdgeExamplePage() {
   // 完全移除翻译逻辑，使页面可以静态生成
