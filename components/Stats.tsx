@@ -28,7 +28,7 @@ function SimpleTooltip({
   return (
     <div className="group relative inline-block">
       {children}
-      <div className={`invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-full mb-2 p-2 bg-gray-800 bg-opacity-60 text-white text-xs rounded-md shadow-lg z-50 ${className}`}>
+      <div className={`invisible group-hover:visible opacity-0 group-hover:opacity-100 transition-opacity absolute bottom-full right-full mr-2 p-2 bg-gray-800 bg-opacity-60 text-white text-xs rounded-md shadow-lg z-50 ${className}`}>
         {content}
       </div>
     </div>
