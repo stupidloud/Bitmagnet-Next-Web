@@ -2,8 +2,10 @@ import { HomeLogo } from "@/components/HomeLogo";
 import { SearchInput } from "@/components/SearchInput";
 import { ToggleTheme, SwitchLanguage } from "@/components/FloatTool";
 import { Stats } from "@/components/Stats";
+// 明确指定该页面为静态生成，启用缓存
+export const dynamic = 'force-static';
+export const revalidate = 600; // 10分钟后重新验证
 
-// 缓存控制已移至middleware.ts中实现
 
 export default function Home() {
   return (
