@@ -19,6 +19,7 @@
 		"@react-aria/visually-hidden": "3.8.12",
 		"@tsparticles/react": "^3.0.0",
 		"@tsparticles/slim": "^3.4.0",
+		"@vercel/examples-ui": "^2.0.3",
 		"autoprefixer": "10.4.19",
 		"clsx": "2.1.1",
 		"dayjs": "^1.11.11",

@@ -1,6 +1,7 @@
 import { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
-import { Link } from "@nextui-org/react";
+import { Button } from "@vercel/examples-ui";
+import Link from "next/link";
 
 export const runtime = "edge";
 
@@ -144,12 +145,13 @@ export default async function SearchPage({
   return (
     <div className="w-full md:max-w-3xl lg:max-w-4xl xl:max-w-5xl 2xl:max-w-6xl">
       <div className="flex items-center mb-7">
-        <Link
-          className="mb-[-2px] mr-2 md:mr-4 leading-none text-[50px] md:text-[60px]"
-          href="/"
-          title={siteConfig.name}
-        >
-          <MagnetIcon />
+        <Link href="/" className="inline-block">
+          <span
+            className="mb-[-2px] mr-2 md:mr-4 leading-none text-[50px] md:text-[60px] inline-block"
+            title={siteConfig.name}
+          >
+            <MagnetIcon />
+          </span>
         </Link>
         <SearchInput defaultValue={searchOption.keyword} />
       </div>
