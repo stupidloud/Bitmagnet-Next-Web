@@ -1,5 +1,7 @@
 import { getTranslations } from "next-intl/server";
 
+export const runtime = 'edge';
+
 export default async function NotFound() {
   const t = await getTranslations("ERROR_MESSAGE");
 

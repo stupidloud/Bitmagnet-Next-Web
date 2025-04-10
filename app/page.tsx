@@ -1,7 +1,22 @@
+import { Metadata } from "next";
 import { HomeLogo } from "@/components/HomeLogo";
 import { SearchInput } from "@/components/SearchInput";
 import { ToggleTheme, SwitchLanguage } from "@/components/FloatTool";
 import { Stats } from "@/components/Stats";
+import { headers } from "next/headers";
+
+// 标记为Edge Runtime
+export const runtime = 'edge';
+
+// 生成元数据并设置缓存控制头
+export async function generateMetadata(): Promise<Metadata> {
+  // 设置缓存控制头
+  headers().set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120');
+
+  return {
+    // 可以在这里设置其他元数据
+  };
+}
 
 export default function Home() {
   return (
