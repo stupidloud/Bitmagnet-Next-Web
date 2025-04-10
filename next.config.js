@@ -12,19 +12,6 @@ const nextConfig = {
     serverComponentsExternalPackages: [
       '@node-rs/jieba'
     ]
-  },
-  async headers() {
-    return [
-      {
-        source: '/',
-        headers: [
-          {
-            key: 'Cache-Control',
-            value: 'public, s-maxage=60, stale-while-revalidate=120'
-          }
-        ]
-      }
-    ];
   }
 }
 
