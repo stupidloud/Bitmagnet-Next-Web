@@ -85,8 +85,9 @@ export default function SearchResultsList({
             className="w-full"
             classNames={{
               label: "text-xs md:text-sm",
-              trigger: "h-10 min-h-10 md:h-12 md:min-h-12",
+              trigger: "h-10 min-h-10 md:h-12 md:min-h-12 relative", // 添加 relative 定位
               value: "text-xs md:text-sm",
+              selectorIcon: "absolute right-2", // 强制箭头到右侧
             }}
             defaultSelectedKeys={[
               searchOption[key as keyof typeof searchOption],
