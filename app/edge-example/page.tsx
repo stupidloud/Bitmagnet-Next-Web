@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export default async function EdgeExamplePage() {
+export default function EdgeExamplePage() {
   // 完全移除翻译逻辑，使页面可以静态生成
   return (
     <div className="flex flex-col items-center justify-center gap-4 w-4/5 md:w-3/5 h-full mx-auto pb-24 md:pb-20">
