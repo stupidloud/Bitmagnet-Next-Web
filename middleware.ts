@@ -17,7 +17,8 @@ export function middleware(request: NextRequest) {
 
   // 为非 API 路由设置缓存控制头
   if (!request.nextUrl.pathname.startsWith('/api/')) {
-    response.headers.set('Cache-Control', 'public, s-maxage=10, stale-while-revalidate=50')
+    response.headers.delete('Cache-Control');
+    response.headers.set('Vercel-CDN-Cache-Control', 'public, s-maxage=10, stale-while-revalidate=50')
   }
 
   // 设置一个新的响应头 `x-hello-from-middleware2`
