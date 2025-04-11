@@ -1,7 +1,15 @@
 import { HomeLogo } from "@/components/HomeLogo";
 import { SearchInput } from "@/components/SearchInput";
 import { ToggleTheme, SwitchLanguage } from "@/components/FloatTool";
-import { Stats } from "@/components/Stats";
+import dynamic from 'next/dynamic';
+import { headers } from "next/headers";
+
+// 使用动态导入实现懒加载
+// 设置 ssr: false 确保组件只在客户端渲染
+const Stats = dynamic(
+  () => import('@/components/Stats').then((mod) => mod.Stats),
+  { ssr: false }
+);
 
 export const runtime = "edge";
 

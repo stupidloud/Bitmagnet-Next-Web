@@ -1,5 +1,7 @@
-import { Suspense } from "react";
-import { getTranslations } from "next-intl/server";
+"use client";
+
+import { Suspense, useState, useEffect } from "react";
+import { useTranslations } from "next-intl";
 import { Button } from "@vercel/examples-ui";
 
 import apiFetch from "@/utils/api";
@@ -35,12 +37,55 @@ function SimpleTooltip({
   );
 }
 
-async function StatsCard() {
-  const t = await getTranslations();
+function StatsCard() {
+  const t = useTranslations();
+  const [data, setData] = useState(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState(null);
 
-  const { data } = await apiFetch("/api/stats", {
-    next: { revalidate: 60 },
-  });
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchStats = async () => {
+      if (isLoading || data) return;
+
+      try {
+        setIsLoading(true);
+        const response = await apiFetch("/api/stats", {
+          next: { revalidate: 60 },
+        });
+
+        if (isMounted) {
+          setData(response.data);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.error("Failed to fetch stats:", err);
+        if (isMounted) {
+          setError(err);
+          setIsLoading(false);
+        }
+      }
+    };
+
+    fetchStats();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  if (isLoading) {
+    return <SimpleSpinner />;
+  }
+
+  if (error) {
+    return <div className="text-xs text-red-500">{t("Stats.error")}</div>;
+  }
+
+  if (!data) {
+    return null;
+  }
 
   return (
     <div className="text-xs text-foreground-600">
@@ -66,16 +111,40 @@ async function StatsCard() {
 }
 
 export function Stats() {
+  const [isHovered, setIsHovered] = useState(false);
+  const [isStatsLoaded, setIsStatsLoaded] = useState(false);
+
+  // 只有当用户悬停时才加载统计信息
+  const handleMouseEnter = () => {
+    setIsHovered(true);
+    if (!isStatsLoaded) {
+      setIsStatsLoaded(true);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setIsHovered(false);
+  };
+
   return (
     <SimpleTooltip
       className="min-w-[200px]"
       content={
-        <Suspense fallback={<SimpleSpinner />}>
+        isStatsLoaded ? (
           <StatsCard />
-        </Suspense>
+        ) : (
+          <div className="text-xs text-foreground-600">
+            <SimpleSpinner />
+          </div>
+        )
       }
     >
-      <InfoFilledIcon className="cursor-pointer text-gray-500" size={15} />
+      <div
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+      >
+        <InfoFilledIcon className="cursor-pointer text-gray-500" size={15} />
+      </div>
     </SimpleTooltip>
   );
 }
