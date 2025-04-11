@@ -8,7 +8,7 @@ import SearchResultsItem from "./SearchResultsItem";
 
 import { SearchResultsListProps } from "@/types";
 import { $env } from "@/utils";
-import { SEARCH_PARAMS, SEARCH_PAGE_MAX } from "@/config/constant";
+import { SEARCH_PARAMS } from "@/config/constant";
 
 export default function SearchResultsList({
   resultList,
@@ -71,7 +71,7 @@ export default function SearchResultsList({
   };
 
   const pagiConf = {
-    page: searchOption.p,
+    page: Number(searchOption.p), // 确保页码是数字类型
     total: Math.ceil(total_count / searchOption.ps), // 移除页数限制
     siblinds: $env.isMobile ? 1 : 3,
   };

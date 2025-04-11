@@ -1,6 +1,6 @@
 import { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
-import { Button } from "@vercel/examples-ui";
+// import { Button } from "@vercel/examples-ui";
 import Link from "next/link";
 
 export const runtime = "edge";
@@ -15,7 +15,6 @@ import {
   SEARCH_PAGE_SIZE,
   DEFAULT_FILTER_TIME,
   DEFAULT_FILTER_SIZE,
-  SEARCH_PAGE_MAX,
 } from "@/config/constant";
 
 type SearchParams = {
@@ -115,7 +114,7 @@ function getSearchOption(searchParams: SearchParams) {
 
   return {
     keyword: searchParams.keyword,
-    p: isNewSearch ? 1 : searchParams.p || 1, // 移除页数限制
+    p: isNewSearch ? 1 : Number(searchParams.p) || 1, // 确保页码是数字类型
     ps: searchParams.ps || SEARCH_PAGE_SIZE,
     sortType: searchParams.sortType || DEFAULT_SORT_TYPE,
     filterTime: searchParams.filterTime || DEFAULT_FILTER_TIME,
