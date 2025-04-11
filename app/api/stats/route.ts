@@ -26,7 +26,7 @@ const query = gql`
 const handler = async () => {
   try {
     // Execute the GraphQL query with the provided hash variable
-    const { data } = await client.query({ query, fetchPolicy: "no-cache" });
+    const { data } = await client.query({ query });
 
     // 移除人为延迟，加快响应速度
     // await new Promise((resolve) => setTimeout(resolve, 5000));
