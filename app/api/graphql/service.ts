@@ -168,12 +168,12 @@ const simpleKeywordSplit = (
 ): { keyword: string; required: boolean }[] => {
   // 按空格分割关键词
   const splitKeywords = keyword.trim().split(/\s+/).filter(k => k.length >= 2);
-  
+
   // 如果没有分割出关键词，返回原始关键词
   if (splitKeywords.length === 0 && keyword.trim().length >= 2) {
     return [{ keyword: keyword.trim(), required: true }];
   }
-  
+
   // 所有分割后的关键词都设置为必须匹配
   return splitKeywords.map(k => ({ keyword: k, required: true }));
 };
@@ -198,7 +198,7 @@ export async function search(_: any, { queryInput }: any) {
       return no_result;
     }
 
-    const REGEX_HASH = /^[a-f0-9]{40}$/;
+    const REGEX_HASH = /^[a-fA-F0-9]{40}$/; // 允许大写和小写字母
 
     if (REGEX_HASH.test(queryInput.keyword)) {
       const torrent = await torrentByHash(_, { hash: queryInput.keyword });
@@ -223,7 +223,7 @@ export async function search(_: any, { queryInput }: any) {
     // 检查关键词是否被斜杠包围
     const slashMatch = SLASH_REGEX.exec(queryInput.keyword);
     let keywords;
-    
+
     if (slashMatch) {
       // 如果被斜杠包围，使用原始处理逻辑
       keywords = extractKeywords(slashMatch[1]);
@@ -262,16 +262,16 @@ export async function search(_: any, { queryInput }: any) {
     const sql = `
 -- 先查到符合过滤条件的数据
 WITH filtered AS (
-  SELECT 
+  SELECT
     torrents.info_hash,    -- 种子哈希
     torrents.name,         -- 种子名称
     torrents.size,         -- 种子大小
     torrents.created_at,   -- 创建时间戳
     torrents.updated_at,   -- 更新时间戳
     torrents.files_count   -- 种子文件数
-  FROM 
+  FROM
     torrents
-  WHERE 
+  WHERE
     (${keywordFilter})   -- 关键词过滤条件
     ${timeFilter}   -- 时间范围过滤条件
     ${sizeFilter}   -- 大小范围过滤条件
@@ -280,7 +280,7 @@ WITH filtered AS (
   OFFSET $${keywords.length + 2}   -- 分页偏移
 )
 -- 从过滤后的数据中查询文件信息
-SELECT 
+SELECT
   filtered.info_hash,    -- 种子哈希
   filtered.name,         -- 种子名称
   filtered.size,         -- 种子大小
@@ -302,7 +302,7 @@ SELECT
     )
     ELSE NULL   -- 如果 files_count 为空, 则设置为NULL
   END AS files  -- 结果别名设为 'files'
-FROM 
+FROM
   filtered;   -- 从过滤后的数据中查询
 `;
 
@@ -338,11 +338,11 @@ FROM (
 
     // 记录查询开始时间
     const queryStartTime = performance.now();
-    
+
     // Execute queries and process results
     const [{ rows: torrentsResp }, { rows: countResp }] =
       await Promise.all(queryArr);
-    
+
     // 计算并打印查询耗时
     const queryEndTime = performance.now();
     console.info(`SQL查询耗时: ${(queryEndTime - queryStartTime).toFixed(2)}ms`);
@@ -384,8 +384,9 @@ WHERE t.info_hash = decode($1, 'hex')
 GROUP BY t.info_hash, t.name, t.size, t.created_at, t.updated_at, t.files_count;
     `;
 
-    const params = [hash];
-    
+    // 将哈希值转换为小写，因为PostgreSQL的decode函数可能对大小写敏感
+    const params = [hash.toLowerCase()];
+
     // 记录SQL查询
     console.debug("SQL:", sql, params);
 
@@ -441,9 +442,9 @@ FROM
 
     // 记录查询开始时间
     const queryStartTime = performance.now();
-    
+
     const { rows } = await query(sql, []);
-    
+
     // 计算并打印查询耗时
     const queryEndTime = performance.now();
     console.info(`statsInfo查询耗时: ${(queryEndTime - queryStartTime).toFixed(2)}ms`);
