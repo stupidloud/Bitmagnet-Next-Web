@@ -1,5 +1,5 @@
-import { NextResponse } from 'next/server'
-import type { NextRequest } from 'next/server'
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
 // 如果在函数内部使用了 `await`，则可以将此函数标记为 `async`
 export function middleware(request: NextRequest) {
@@ -13,17 +13,17 @@ export function middleware(request: NextRequest) {
       // 新的请求头
       // headers: requestHeaders,
     },
-  })
+  });
 
   // 为非 API 路由设置缓存控制头
-  if (!request.nextUrl.pathname.startsWith('/api/')) {
-    response.headers.delete('Cache-Control');
-    response.headers.set('Vercel-CDN-Cache-Control', 'public, s-maxage=10, stale-while-revalidate=50')
+  if (!request.nextUrl.pathname.startsWith("/api/")) {
+    response.headers.delete("Cache-Control");
+    response.headers.set("Cache-Control", "public, s-maxage=1000, stale-while-revalidate=500");
   }
 
   // 设置一个新的响应头 `x-hello-from-middleware2`
   // response.headers.set('x-hello-from-middleware2', 'hello')
-  return response
+  return response;
 }
 
 // 更多信息请参见下面的“匹配路径”
@@ -35,7 +35,5 @@ export const config = {
    * - _next/image (图像优化文件)
    * - favicon.ico (网站图标文件)
    */
-  matcher: [
-    '/((?!api|_next/static|_next/image|favicon.ico).*)',
-  ],
-}
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+};

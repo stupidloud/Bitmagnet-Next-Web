@@ -21,7 +21,7 @@ export const SEARCH_DISPLAY_FILES_MAX = 10;
 export const SEARCH_KEYWORD_LENGTH_MIN = 2;
 export const SEARCH_KEYWORD_LENGTH_MAX = 100;
 export const SEARCH_PAGE_SIZE = 10;
-export const SEARCH_PAGE_MAX = 100;
+export const SEARCH_PAGE_MAX = 1000000; // 实际上移除页数限制
 
 export const DEFAULT_SORT_TYPE = "default";
 export const DEFAULT_FILTER_TIME = "all";

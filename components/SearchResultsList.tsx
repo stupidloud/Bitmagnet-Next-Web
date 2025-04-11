@@ -72,7 +72,7 @@ export default function SearchResultsList({
 
   const pagiConf = {
     page: searchOption.p,
-    total: Math.min(Math.ceil(total_count / searchOption.ps), SEARCH_PAGE_MAX),
+    total: Math.ceil(total_count / searchOption.ps), // 移除页数限制
     siblinds: $env.isMobile ? 1 : 3,
   };
 

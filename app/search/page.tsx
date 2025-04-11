@@ -115,7 +115,7 @@ function getSearchOption(searchParams: SearchParams) {
 
   return {
     keyword: searchParams.keyword,
-    p: Math.min(isNewSearch ? 1 : searchParams.p || 1, SEARCH_PAGE_MAX),
+    p: isNewSearch ? 1 : searchParams.p || 1, // 移除页数限制
     ps: searchParams.ps || SEARCH_PAGE_SIZE,
     sortType: searchParams.sortType || DEFAULT_SORT_TYPE,
     filterTime: searchParams.filterTime || DEFAULT_FILTER_TIME,
