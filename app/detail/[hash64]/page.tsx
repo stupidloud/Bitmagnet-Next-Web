@@ -17,7 +17,10 @@ async function fetchData(hash64: string) {
   }
 
   const data = await apiFetch(`/api/detail?hash=${hash}`, {
-    next: { revalidate: 60 * 60 * 24 * 7 }, // cache for 7 days
+    next: {
+      revalidate: 60 * 60 * 24 * 7, // cache for 7 days
+      tags: [`torrent-${hash}`] // 添加缓存标签，便于按需重新验证
+    },
   });
 
   return data;
