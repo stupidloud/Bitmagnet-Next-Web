@@ -73,14 +73,14 @@ export function formatTorrent(row: Torrent) {
 }
 
 // Utility functions for query building
-const buildOrderBy = (sortType: keyof typeof orderByMap) => {
-  const orderByMap = {
-    size: "torrents.size DESC",
-    count: "COALESCE(torrents.files_count, 0) DESC",
-    date: "torrents.created_at ASC",
+const buildOrderBy = (sortType: string, alias = "torrents") => {
+  const orderByMap: Record<string, string> = {
+    size: `${alias}.size DESC`,
+    count: `COALESCE(${alias}.files_count, 0) DESC`,
+    date: `${alias}.created_at ASC`,
   };
 
-  return orderByMap[sortType] || "torrents.created_at DESC";
+  return orderByMap[sortType] || `${alias}.created_at DESC`;
 };
 
 const buildTimeFilter = (filterTime: keyof typeof timeFilterMap) => {
@@ -229,68 +229,114 @@ function buildKeywordGroups(keywords: SearchKeyword[]): SearchKeywordGroup[] {
   }));
 }
 
+type KeywordConditionGroup = {
+  required: boolean;
+  variants: string[]; // 同一个关键词的各个变体, 每个变体绑定一个占位符
+};
+
+// 把关键词组编译成 SQL 条件片段, params 的顺序即占位符 $1..$n 的顺序
+function buildKeywordConditions(
+  keywordGroups: SearchKeywordGroup[],
+  fieldName: string,
+) {
+  const params: string[] = [];
+  const groups: KeywordConditionGroup[] = keywordGroups.map(
+    ({ keywords, required }) => ({
+      required,
+      variants: keywords.map((keyword) => {
+        params.push(`%${keyword}%`);
+
+        return `${fieldName} ILIKE $${params.length}`;
+      }),
+    }),
+  );
+
+  return { groups, params };
+}
+
+// 把条件组拼成一条 WHERE 子句; expand 可将某个组替换成它的单个变体
+function combineKeywordGroups(
+  groups: KeywordConditionGroup[],
+  expand?: { group: KeywordConditionGroup; condition: string },
+) {
+  const conditionOf = (group: KeywordConditionGroup) => {
+    if (expand && group === expand.group) {
+      return expand.condition;
+    }
+
+    return group.variants.length === 1
+      ? group.variants[0]
+      : `(${group.variants.join(" OR ")})`;
+  };
+
+  const conditions = groups.filter(({ required }) => required).map(conditionOf);
+  const optionalConditions = groups
+    .filter(({ required }) => !required)
+    .map(conditionOf);
+
+  if (optionalConditions.length > 0) {
+    conditions.push(`(${[...optionalConditions, "TRUE"].join(" OR ")})`);
+  }
+
+  return conditions.length > 0 ? conditions.join(" AND ") : "TRUE";
+}
+
 function buildKeywordFilter(
   keywordGroups: SearchKeywordGroup[],
   fieldName: string,
 ) {
-  const requiredKeywords: string[] = [];
-  const optionalKeywords: string[] = [];
-  const params: string[] = [];
+  const { groups, params } = buildKeywordConditions(keywordGroups, fieldName);
 
-  keywordGroups.forEach(({ keywords, required }) => {
-    const variants = keywords.map((keyword) => {
-      params.push(`%${keyword}%`);
+  return { keywordFilter: combineKeywordGroups(groups), params };
+}
 
-      return `${fieldName} ILIKE $${params.length}`;
-    });
-    const condition =
-      variants.length === 1 ? variants[0] : `(${variants.join(" OR ")})`;
+// 挑出变体最多的必需组, 用于 UNION 展开
+function pickExpandableGroup(groups: KeywordConditionGroup[]) {
+  return groups
+    .filter(({ required, variants }) => required && variants.length > 1)
+    .sort((a, b) => b.variants.length - a.variants.length)[0];
+}
 
-    if (required) {
-      requiredKeywords.push(condition);
-    } else {
-      optionalKeywords.push(condition);
-    }
-  });
+// 变体展开产生的 OR (如 '%ssis850%' OR '%ssis-850%') 会让 pg_trgm 的选择性估算翻倍,
+// 进而让规划器误以为沿 torrents_created_at_desc_idx 倒序扫一小段就能凑够 LIMIT 行,
+// 实际要扫上千万行 (实测 30s)。拆成 UNION 后每个分支只有一个 pattern, 各自走 GIN 索引。
+function buildKeywordBranches(
+  keywordGroups: SearchKeywordGroup[],
+  fieldName: string,
+) {
+  const { groups, params } = buildKeywordConditions(keywordGroups, fieldName);
+  const expandable = pickExpandableGroup(groups);
 
-  const fullConditions = [...requiredKeywords];
-
-  if (optionalKeywords.length > 0) {
-    optionalKeywords.push("TRUE");
-    fullConditions.push(`(${optionalKeywords.join(" OR ")})`);
+  if (!expandable) {
+    return { branches: [combineKeywordGroups(groups)], params };
   }
 
   return {
-    keywordFilter:
-      fullConditions.length > 0 ? fullConditions.join(" AND ") : "TRUE",
+    branches: expandable.variants.map((condition) =>
+      combineKeywordGroups(groups, { group: expandable, condition }),
+    ),
     params,
   };
 }
 
 function buildSearchSql({
   keywordGroups,
-  orderBy,
+  sortType,
   timeFilter,
   sizeFilter,
   limitParamIndex,
   offsetParamIndex,
 }: {
   keywordGroups: SearchKeywordGroup[];
-  orderBy: string;
+  sortType: string;
   timeFilter: string;
   sizeFilter: string;
   limitParamIndex: number;
   offsetParamIndex: number;
 }) {
-  const { keywordFilter } = buildKeywordFilter(
-    keywordGroups,
-    "torrents.name",
-  );
+  const { branches } = buildKeywordBranches(keywordGroups, "torrents.name");
 
-  return `
--- 先查到符合过滤条件的数据
-WITH filtered AS (
-  SELECT
+  const buildBranch = (keywordFilter: string) => `  SELECT
     torrents.info_hash,    -- 种子哈希
     torrents.name,         -- 种子名称
     torrents.size,         -- 种子大小
@@ -302,11 +348,31 @@ WITH filtered AS (
   WHERE
     (${keywordFilter})   -- 关键词过滤条件
     ${timeFilter}   -- 时间范围过滤条件
-    ${sizeFilter}   -- 大小范围过滤条件
-  ${orderBy ? `ORDER BY ${orderBy}` : ""} -- 排序方式
+    ${sizeFilter}   -- 大小范围过滤条件`;
+
+  const paginate = (alias?: string) => `  ORDER BY ${buildOrderBy(sortType, alias)} -- 排序方式
   LIMIT $${limitParamIndex}    -- 返回数量
-  OFFSET $${offsetParamIndex}   -- 分页偏移
-)
+  OFFSET $${offsetParamIndex}   -- 分页偏移`;
+
+  // 单分支时保持原有形状, 让 LIMIT 直接下推到表扫描
+  // 多分支时先 UNION 去重 (同一条记录可能同时命中多个变体), 再排序分页
+  const filteredCte =
+    branches.length === 1
+      ? `filtered AS (
+${buildBranch(branches[0])}
+${paginate()}
+)`
+      : `matched AS (
+${branches.map(buildBranch).join("\n  UNION\n")}
+),
+filtered AS (
+  SELECT * FROM matched
+${paginate("matched")}
+)`;
+
+  return `
+-- 先查到符合过滤条件的数据
+WITH ${filteredCte}
 -- 从过滤后的数据中查询文件信息
 SELECT
   filtered.info_hash,    -- 种子哈希
@@ -400,7 +466,6 @@ export async function search(_: any, { queryInput }: any) {
     }
 
     // Build SQL conditions and parameters
-    const orderBy = buildOrderBy(queryInput.sortType);
     const timeFilter = buildTimeFilter(queryInput.filterTime);
     const sizeFilter = buildSizeFilter(queryInput.filterSize);
 
@@ -408,13 +473,13 @@ export async function search(_: any, { queryInput }: any) {
     const keywordGroups = buildKeywordGroups(keywords);
     const keywordsPlain = keywordGroups.flatMap(({ keywords }) => keywords);
 
-    const { params: keywordParams } = buildKeywordFilter(
+    const { params: keywordParams } = buildKeywordConditions(
       keywordGroups,
       "torrents.name",
     );
     const sql = buildSearchSql({
       keywordGroups,
-      orderBy,
+      sortType: queryInput.sortType,
       timeFilter,
       sizeFilter,
       limitParamIndex: keywordParams.length + 1,
