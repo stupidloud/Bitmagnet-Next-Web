@@ -2,8 +2,8 @@ import { Metadata } from "next";
 import { notFound } from "next/navigation";
 
 import { base64ToHex, getLinkInfoFromWhatsLink } from "@/utils";
-import apiFetch from "@/utils/api";
 import { DetailContent } from "@/components/DetailContent";
+import { torrentByHash } from "@/app/api/graphql/service";
 
 // Function to fetch torrent data based on the hash
 async function fetchData(hash64: string) {
@@ -14,19 +14,22 @@ async function fetchData(hash64: string) {
     notFound();
   }
 
-  const data = await apiFetch(`/api/detail?hash=${hash}`, {
-    next: { revalidate: 60 * 60 * 24 * 7 }, // cache for 7 days
-  });
+  const data = await torrentByHash(null, { hash });
 
-  return data;
+  if (!data) {
+    notFound();
+  }
+
+  return { data };
 }
 
 // Function to generate metadata for the page
 export async function generateMetadata({
-  params: { hash64 },
+  params,
 }: {
-  params: { hash64: string };
+  params: Promise<{ hash64: string }>;
 }): Promise<Metadata> {
+  const { hash64 } = await params;
   const { data } = await fetchData(hash64);
 
   return {
@@ -36,10 +39,11 @@ export async function generateMetadata({
 
 // Component to render the detail page
 export default async function Detail({
-  params: { hash64 },
+  params,
 }: {
-  params: { hash64: string };
+  params: Promise<{ hash64: string }>;
 }) {
+  const { hash64 } = await params;
   const { data } = await fetchData(hash64);
 
   const linkInfo = getLinkInfoFromWhatsLink(data.magnet_uri);

@@ -5,38 +5,28 @@ import {
   SEARCH_PARAMS,
   SEARCH_KEYWORD_LENGTH_MIN,
   SEARCH_KEYWORD_LENGTH_MAX,
-  SEARCH_PAGE_SIZE,
   DEFAULT_SORT_TYPE,
   DEFAULT_FILTER_TIME,
   DEFAULT_FILTER_SIZE,
 } from "@/config/constant";
-import { search } from "@/app/api/graphql/service";
+import { searchTotalCount } from "@/app/api/graphql/service";
 
-// Define the schema for the request parameters using Zod
 const schema = z.object({
   keyword: z
     .string()
     .min(SEARCH_KEYWORD_LENGTH_MIN)
     .max(SEARCH_KEYWORD_LENGTH_MAX),
-  offset: z.coerce.number().min(0).default(0),
-  limit: z.coerce
-    .number()
-    .min(1)
-    .max(SEARCH_PAGE_SIZE)
-    .default(SEARCH_PAGE_SIZE),
   sortType: z.enum(SEARCH_PARAMS.sortType).default(DEFAULT_SORT_TYPE),
   filterTime: z.enum(SEARCH_PARAMS.filterTime).default(DEFAULT_FILTER_TIME),
   filterSize: z.enum(SEARCH_PARAMS.filterSize).default(DEFAULT_FILTER_SIZE),
 });
 
 const handler = async (request: Request) => {
-  // Extract search parameters from the request URL
   const { searchParams } = new URL(request.url);
   const params = Object.fromEntries(searchParams.entries());
 
   let safeParams;
 
-  // Validate and parse the parameters using Zod schema
   try {
     safeParams = schema.parse(params);
   } catch (error: any) {
@@ -51,29 +41,18 @@ const handler = async (request: Request) => {
         message: errMessage || "Invalid request",
         status: 400,
       },
-      {
-        status: 400,
-      },
+      { status: 400 },
     );
   }
 
-  // Perform the search query directly to avoid a server-side HTTP round trip.
   try {
-    const data = await search(null, { queryInput: safeParams });
+    const data = await searchTotalCount(null, { queryInput: safeParams });
 
-    return NextResponse.json(
-      {
-        data,
-        message: "success",
-        status: 200,
-      },
-      {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json; charset=utf-8",
-        },
-      },
-    );
+    return NextResponse.json({
+      data,
+      message: "success",
+      status: 200,
+    });
   } catch (error: any) {
     console.error(error);
 
@@ -83,9 +62,7 @@ const handler = async (request: Request) => {
         message: error?.message || "Internal Server Error",
         status: 500,
       },
-      {
-        status: 500,
-      },
+      { status: 500 },
     );
   }
 };

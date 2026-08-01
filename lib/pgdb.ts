@@ -1,29 +1,34 @@
-import { Pool } from "pg";
+import { getCloudflareContext } from "@opennextjs/cloudflare";
+import { Client } from "pg";
 
-// Load connection string from environment
-let connectionString = process.env.POSTGRES_DB_URL;
+async function getHyperdriveConnectionString() {
+  const { env } = await getCloudflareContext({ async: true });
+  const hyperdrive = (
+    env as CloudflareEnv & {
+      HYPERDRIVE?: { connectionString: string };
+    }
+  ).HYPERDRIVE;
 
-if (!connectionString) {
-  const host = process.env.POSTGRES_HOST;
-  const password = process.env.POSTGRES_PASSWORD;
-  const user = process.env.POSTGRES_USER || "postgres"; // optional, defaults to 'postgres'
-  const db = process.env.POSTGRES_DB || "bitmagnet"; // optional, defaults to 'bitmagnet'
-  const port = process.env.POSTGRES_PORT || "5432"; // optional, defaults to 5432
-
-  if (!host || !password) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      "Missing environment variables `POSTGRES_DB_URL` or `POSTGRES_HOST` and `POSTGRES_PASSWORD`",
-    );
+  if (!hyperdrive?.connectionString) {
+    throw new Error("Missing Cloudflare `HYPERDRIVE` binding");
   }
 
-  // Build connection string
-  connectionString = `postgres://${user}:${password}@${host}:${port}/${db}`;
+  return hyperdrive.connectionString;
 }
 
-const pool = new Pool({
-  connectionString,
-  ssl: false,
-});
+async function queryWithClient(text: string, params: any) {
+  const connectionString = await getHyperdriveConnectionString();
+  const client = new Client({ connectionString });
 
-export const query = (text: string, params: any) => pool.query(text, params);
+  await client.connect();
+
+  try {
+    return await client.query(text, params);
+  } finally {
+    await client.end();
+  }
+}
+
+export const query = async (text: string, params: any) => {
+  return queryWithClient(text, params);
+};

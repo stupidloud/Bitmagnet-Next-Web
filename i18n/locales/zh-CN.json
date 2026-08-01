@@ -51,6 +51,7 @@
       "gt5gb": "大于5GB"
     },
     "results_found": "找到约 {count} 条结果",
+    "results_counting": "正在统计结果…",
     "cost_time": "(用时 {cost_time}ms)",
     "more_files": "…还有 {count} 个文件",
     "magnet": "磁力链接",

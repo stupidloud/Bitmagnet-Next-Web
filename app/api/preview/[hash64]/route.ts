@@ -1,27 +1,13 @@
-import { NextResponse } from "next/server";
-
-import { base64ToHex, getLinkInfoFromWhatsLink } from "@/utils";
 import { getPreviewInfo, success, fail } from "../service";
-
-const invalid = (message: string) => {
-  return NextResponse.json(
-    {
-      message,
-      status: 400,
-    },
-    {
-      status: 400,
-    },
-  );
-};
 
 // Function to handle GET requests
 const handler = async (
   request: Request,
-  { params }: { params: { hash64: string } },
+  { params }: { params: Promise<{ hash64: string }> },
 ) => {
   try {
-    const linkInfo = await getPreviewInfo(params.hash64);
+    const { hash64 } = await params;
+    const linkInfo = await getPreviewInfo(hash64);
 
     console.log(linkInfo);
 

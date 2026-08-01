@@ -2,16 +2,13 @@ import { Suspense } from "react";
 import { getTranslations } from "next-intl/server";
 import { Tooltip, Spinner } from "@nextui-org/react";
 
-import apiFetch from "@/utils/api";
+import { statsInfo } from "@/app/api/graphql/service";
 import { InfoFilledIcon } from "@/components/icons";
 import { formatByteSize, formatDate } from "@/utils";
 
 async function StatsCard() {
   const t = await getTranslations();
-
-  const { data } = await apiFetch("/api/stats", {
-    next: { revalidate: 60 },
-  });
+  const data = await statsInfo();
 
   return (
     <div className="text-xs text-foreground-600">

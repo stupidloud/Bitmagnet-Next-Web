@@ -10,7 +10,11 @@
 
 # next.js
 /.next/
+/.open-next/
 /out/
+
+# cloudflare
+/.wrangler/
 
 # production
 /build
@@ -35,3 +39,7 @@ yarn-error.log*
 next-env.d.ts
 
 .history
+
+# MCP local config (may contain secrets)
+.mcp.json
+dbhub.toml

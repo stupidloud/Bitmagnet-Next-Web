@@ -53,6 +53,7 @@
       "gt5gb": "More than 5GB"
     },
     "results_found": "About {count} results found",
+    "results_counting": "Counting results…",
     "cost_time": "(Processed in {cost_time}ms)",
     "more_files": "…and {count} more files",
     "magnet": "Magnet link",

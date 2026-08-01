@@ -29,7 +29,7 @@ export function formatTorrent(row: Torrent) {
       {
         index: 0,
         path: row.name,
-        size: row.size,
+        size: Number(row.size),
         extension: row.name.split(".").pop() || "",
       },
     ];
@@ -38,7 +38,7 @@ export function formatTorrent(row: Torrent) {
   return {
     hash: hash,
     name: row.name,
-    size: row.size,
+    size: Number(row.size),
     magnet_uri: `magnet:?xt=urn:btih:${hash}&dn=${encodeURIComponent(row.name)}&xl=${row.size}`, // Create magnet URI
     single_file: row.files_count <= 1,
     files_count: row.files_count || 1,
@@ -46,7 +46,7 @@ export function formatTorrent(row: Torrent) {
       .map((file) => ({
         index: file.index,
         path: file.path,
-        size: file.size,
+        size: Number(file.size),
         extension: file.extension,
       }))
       .sort((a, b) => {
@@ -167,7 +167,10 @@ const simpleKeywordSplit = (
   keyword: string,
 ): { keyword: string; required: boolean }[] => {
   // 按空格分割关键词
-  const splitKeywords = keyword.trim().split(/\s+/).filter(k => k.length >= 2);
+  const splitKeywords = keyword
+    .trim()
+    .split(/\s+/)
+    .filter((k) => k.length >= 2);
 
   // 如果没有分割出关键词，返回原始关键词
   if (splitKeywords.length === 0 && keyword.trim().length >= 2) {
@@ -175,8 +178,189 @@ const simpleKeywordSplit = (
   }
 
   // 所有分割后的关键词都设置为必须匹配
-  return splitKeywords.map(k => ({ keyword: k, required: true }));
+  return splitKeywords.map((k) => ({ keyword: k, required: true }));
 };
+
+type SearchKeyword = {
+  keyword: string;
+  required: boolean;
+};
+
+type SearchKeywordGroup = {
+  keywords: string[];
+  required: boolean;
+};
+
+function parseSearchKeywords(keyword: string): SearchKeyword[] {
+  const slashMatch = SLASH_REGEX.exec(keyword);
+
+  if (slashMatch) {
+    // 如果被斜杠包围，使用原始处理逻辑
+    return extractKeywords(slashMatch[1]);
+  }
+
+  // 否则使用简单空格分割，所有关键词都是必须匹配的
+  return simpleKeywordSplit(keyword);
+}
+
+const HYphenatedCodeRegex = /^(\d*[A-Za-z]{2,})-(\d{2,})$/;
+const COMPACT_CODE_REGEX = /^(\d*[A-Za-z]{2,})(\d{2,})$/;
+
+function getKeywordVariants(keyword: string) {
+  const hyphenatedMatch = HYphenatedCodeRegex.exec(keyword);
+
+  if (hyphenatedMatch) {
+    return [keyword, `${hyphenatedMatch[1]}${hyphenatedMatch[2]}`];
+  }
+
+  const compactMatch = COMPACT_CODE_REGEX.exec(keyword);
+
+  if (compactMatch) {
+    return [keyword, `${compactMatch[1]}-${compactMatch[2]}`];
+  }
+
+  return [keyword];
+}
+
+function buildKeywordGroups(keywords: SearchKeyword[]): SearchKeywordGroup[] {
+  return keywords.map(({ keyword, required }) => ({
+    keywords: Array.from(new Set(getKeywordVariants(keyword))),
+    required,
+  }));
+}
+
+function buildKeywordFilter(
+  keywordGroups: SearchKeywordGroup[],
+  fieldName: string,
+) {
+  const requiredKeywords: string[] = [];
+  const optionalKeywords: string[] = [];
+  const params: string[] = [];
+
+  keywordGroups.forEach(({ keywords, required }) => {
+    const variants = keywords.map((keyword) => {
+      params.push(`%${keyword}%`);
+
+      return `${fieldName} ILIKE $${params.length}`;
+    });
+    const condition =
+      variants.length === 1 ? variants[0] : `(${variants.join(" OR ")})`;
+
+    if (required) {
+      requiredKeywords.push(condition);
+    } else {
+      optionalKeywords.push(condition);
+    }
+  });
+
+  const fullConditions = [...requiredKeywords];
+
+  if (optionalKeywords.length > 0) {
+    optionalKeywords.push("TRUE");
+    fullConditions.push(`(${optionalKeywords.join(" OR ")})`);
+  }
+
+  return {
+    keywordFilter:
+      fullConditions.length > 0 ? fullConditions.join(" AND ") : "TRUE",
+    params,
+  };
+}
+
+function buildSearchSql({
+  keywordGroups,
+  orderBy,
+  timeFilter,
+  sizeFilter,
+  limitParamIndex,
+  offsetParamIndex,
+}: {
+  keywordGroups: SearchKeywordGroup[];
+  orderBy: string;
+  timeFilter: string;
+  sizeFilter: string;
+  limitParamIndex: number;
+  offsetParamIndex: number;
+}) {
+  const { keywordFilter } = buildKeywordFilter(
+    keywordGroups,
+    "torrents.name",
+  );
+
+  return `
+-- 先查到符合过滤条件的数据
+WITH filtered AS (
+  SELECT
+    torrents.info_hash,    -- 种子哈希
+    torrents.name,         -- 种子名称
+    torrents.size,         -- 种子大小
+    torrents.created_at,   -- 创建时间戳
+    torrents.updated_at,   -- 更新时间戳
+    torrents.files_count   -- 种子文件数
+  FROM
+    torrents
+  WHERE
+    (${keywordFilter})   -- 关键词过滤条件
+    ${timeFilter}   -- 时间范围过滤条件
+    ${sizeFilter}   -- 大小范围过滤条件
+  ${orderBy ? `ORDER BY ${orderBy}` : ""} -- 排序方式
+  LIMIT $${limitParamIndex}    -- 返回数量
+  OFFSET $${offsetParamIndex}   -- 分页偏移
+)
+-- 从过滤后的数据中查询文件信息
+SELECT
+  filtered.info_hash,    -- 种子哈希
+  filtered.name,         -- 种子名称
+  filtered.size,         -- 种子大小
+  filtered.created_at,   -- 创建时间戳
+  filtered.updated_at,   -- 更新时间戳
+  filtered.files_count,  -- 种子文件数
+  -- 检查 files_count, 是否有文件数量
+  CASE
+    WHEN filtered.files_count IS NOT NULL THEN (
+      -- 如果有数量, 根据 info_hash 查询文件信息到 'files' 列, 聚合成JSON
+      SELECT json_agg(json_build_object(
+        'index', torrent_files.index,         -- 文件在种子中的索引
+        'path', torrent_files.path,           -- 文件在种子中的路径
+        'size', torrent_files.size,           -- 文件大小
+        'extension', torrent_files.extension  -- 文件扩展名
+      ))
+      FROM torrent_files
+      WHERE torrent_files.info_hash = filtered.info_hash   -- 根据 info_hash 匹配文件
+    )
+    ELSE NULL   -- 如果 files_count 为空, 则设置为NULL
+  END AS files  -- 结果别名设为 'files'
+FROM
+  filtered;   -- 从过滤后的数据中查询
+`;
+}
+
+function buildCountSql({
+  keywordGroups,
+  timeFilter,
+  sizeFilter,
+}: {
+  keywordGroups: SearchKeywordGroup[];
+  timeFilter: string;
+  sizeFilter: string;
+}) {
+  const { keywordFilter } = buildKeywordFilter(
+    keywordGroups,
+    "torrents.name",
+  );
+
+  return `
+SELECT COUNT(*) AS total
+FROM (
+  SELECT 1
+  FROM torrents
+  WHERE
+    (${keywordFilter})
+    ${timeFilter}
+    ${sizeFilter}
+) AS limited_total;
+        `;
+}
 
 export async function search(_: any, { queryInput }: any) {
   try {
@@ -220,144 +404,91 @@ export async function search(_: any, { queryInput }: any) {
     const timeFilter = buildTimeFilter(queryInput.filterTime);
     const sizeFilter = buildSizeFilter(queryInput.filterSize);
 
-    // 检查关键词是否被斜杠包围
-    const slashMatch = SLASH_REGEX.exec(queryInput.keyword);
-    let keywords;
+    const keywords = parseSearchKeywords(queryInput.keyword);
+    const keywordGroups = buildKeywordGroups(keywords);
+    const keywordsPlain = keywordGroups.flatMap(({ keywords }) => keywords);
 
-    if (slashMatch) {
-      // 如果被斜杠包围，使用原始处理逻辑
-      keywords = extractKeywords(slashMatch[1]);
-    } else {
-      // 否则使用简单空格分割，所有关键词都是必须匹配的
-      keywords = simpleKeywordSplit(queryInput.keyword);
-    }
-
-    // Construct the keyword filter condition
-    const requiredKeywords: string[] = [];
-    const optionalKeywords: string[] = [];
-
-    keywords.forEach(({ required }, i) => {
-      const condition = `torrents.name ILIKE $${i + 1}`;
-
-      if (required) {
-        requiredKeywords.push(condition);
-      } else {
-        optionalKeywords.push(condition);
-      }
+    const { params: keywordParams } = buildKeywordFilter(
+      keywordGroups,
+      "torrents.name",
+    );
+    const sql = buildSearchSql({
+      keywordGroups,
+      orderBy,
+      timeFilter,
+      sizeFilter,
+      limitParamIndex: keywordParams.length + 1,
+      offsetParamIndex: keywordParams.length + 2,
     });
-
-    const fullConditions = [...requiredKeywords];
-
-    if (optionalKeywords.length > 0) {
-      optionalKeywords.push("TRUE");
-      fullConditions.push(`(${optionalKeywords.join(" OR ")})`);
-    }
-
-    const keywordFilter = fullConditions.join(" AND ");
-
-    const keywordsParams = keywords.map(({ keyword }) => `%${keyword}%`);
-    const keywordsPlain = keywords.map(({ keyword }) => keyword);
-
-    // SQL query to fetch filtered torrent data and files information
-    const sql = `
--- 先查到符合过滤条件的数据
-WITH filtered AS (
-  SELECT
-    torrents.info_hash,    -- 种子哈希
-    torrents.name,         -- 种子名称
-    torrents.size,         -- 种子大小
-    torrents.created_at,   -- 创建时间戳
-    torrents.updated_at,   -- 更新时间戳
-    torrents.files_count   -- 种子文件数
-  FROM
-    torrents
-  WHERE
-    (${keywordFilter})   -- 关键词过滤条件
-    ${timeFilter}   -- 时间范围过滤条件
-    ${sizeFilter}   -- 大小范围过滤条件
-  ${orderBy ? `ORDER BY ${orderBy}` : ""} -- 排序方式
-  LIMIT $${keywords.length + 1}    -- 返回数量
-  OFFSET $${keywords.length + 2}   -- 分页偏移
-)
--- 从过滤后的数据中查询文件信息
-SELECT
-  filtered.info_hash,    -- 种子哈希
-  filtered.name,         -- 种子名称
-  filtered.size,         -- 种子大小
-  filtered.created_at,   -- 创建时间戳
-  filtered.updated_at,   -- 更新时间戳
-  filtered.files_count,  -- 种子文件数
-  -- 检查 files_count, 是否有文件数量
-  CASE
-    WHEN filtered.files_count IS NOT NULL THEN (
-      -- 如果有数量, 根据 info_hash 查询文件信息到 'files' 列, 聚合成JSON
-      SELECT json_agg(json_build_object(
-        'index', torrent_files.index,         -- 文件在种子中的索引
-        'path', torrent_files.path,           -- 文件在种子中的路径
-        'size', torrent_files.size,           -- 文件大小
-        'extension', torrent_files.extension  -- 文件扩展名
-      ))
-      FROM torrent_files
-      WHERE torrent_files.info_hash = filtered.info_hash   -- 根据 info_hash 匹配文件
-    )
-    ELSE NULL   -- 如果 files_count 为空, 则设置为NULL
-  END AS files  -- 结果别名设为 'files'
-FROM
-  filtered;   -- 从过滤后的数据中查询
-`;
-
-    const params = [...keywordsParams, queryInput.limit, queryInput.offset];
+    const params = [
+      ...keywordParams,
+      queryInput.limit + 1,
+      queryInput.offset,
+    ];
 
     console.debug("SQL:", sql, params);
     console.debug(
       "keywords:",
-      keywords.map((item, i) => ({ _: `$${i + 1}`, ...item })),
+      keywordGroups.map((item, i) => ({ _: `group${i + 1}`, ...item })),
     );
 
-    const queryArr = [query(sql, params)];
-
-    // SQL query to get the total count if requested
-    if (queryInput.withTotalCount) {
-      const countSql = `
-SELECT COUNT(*) AS total
-FROM (
-  SELECT 1
-  FROM torrents
-  WHERE
-    (${keywordFilter})
-    ${timeFilter}
-    ${sizeFilter}
-) AS limited_total;
-        `;
-      const countParams = [...keywordsParams];
-
-      queryArr.push(query(countSql, countParams));
-    } else {
-      queryArr.push(Promise.resolve({ rows: [{ total: 0 }] }) as any);
-    }
-
-    // 记录查询开始时间
     const queryStartTime = performance.now();
-
-    // Execute queries and process results
-    const [{ rows: torrentsResp }, { rows: countResp }] =
-      await Promise.all(queryArr);
-
-    // 计算并打印查询耗时
+    const { rows: torrentsResp } = await query(sql, params);
     const queryEndTime = performance.now();
-    console.info(`SQL查询耗时: ${(queryEndTime - queryStartTime).toFixed(2)}ms`);
 
-    const torrents = torrentsResp.map(formatTorrent);
-    const total_count = countResp[0].total;
+    console.info(
+      `search SQL查询耗时: ${(queryEndTime - queryStartTime).toFixed(2)}ms`,
+    );
+    const has_more = torrentsResp.length > queryInput.limit;
+    const pageRows = has_more
+      ? torrentsResp.slice(0, queryInput.limit)
+      : torrentsResp;
 
-    const has_more =
-      queryInput.withTotalCount &&
-      queryInput.offset + queryInput.limit < total_count;
+    const torrents = pageRows.map(formatTorrent);
 
-    return { keywords: keywordsPlain, torrents, total_count, has_more };
+    return { keywords: keywordsPlain, torrents, total_count: null, has_more };
   } catch (error) {
     console.error("Error in search resolver:", error);
     throw new Error("Failed to execute search query");
+  }
+}
+
+export async function searchTotalCount(_: any, { queryInput }: any) {
+  try {
+    queryInput.keyword = queryInput.keyword.trim();
+
+    if (queryInput.keyword.length < 2) {
+      return { total_count: 0 };
+    }
+
+    const REGEX_HASH = /^[a-fA-F0-9]{40}$/;
+
+    if (REGEX_HASH.test(queryInput.keyword)) {
+      const torrent = await torrentByHash(_, { hash: queryInput.keyword });
+
+      return { total_count: torrent ? 1 : 0 };
+    }
+
+    const timeFilter = buildTimeFilter(queryInput.filterTime);
+    const sizeFilter = buildSizeFilter(queryInput.filterSize);
+    const keywordGroups = buildKeywordGroups(
+      parseSearchKeywords(queryInput.keyword),
+    );
+    const { params: keywordParams } = buildKeywordFilter(
+      keywordGroups,
+      "torrents.name",
+    );
+    const countSql = buildCountSql({
+      keywordGroups,
+      timeFilter,
+      sizeFilter,
+    });
+    const { rows } = await query(countSql, keywordParams);
+
+    return { total_count: Number(rows[0].total) };
+  } catch (error) {
+    console.error("Error in searchTotalCount resolver:", error);
+    throw new Error("Failed to execute search count query");
   }
 }
 
@@ -447,7 +578,10 @@ FROM
 
     // 计算并打印查询耗时
     const queryEndTime = performance.now();
-    console.info(`statsInfo查询耗时: ${(queryEndTime - queryStartTime).toFixed(2)}ms`);
+
+    console.info(
+      `statsInfo查询耗时: ${(queryEndTime - queryStartTime).toFixed(2)}ms`,
+    );
     const data = rows[0];
 
     if (!data) {
@@ -456,9 +590,12 @@ FROM
 
     return {
       ...data,
+      size: Number(data.size),
+      total_count: Number(data.total_count),
       updated_at: Math.floor(new Date(data.updated_at).getTime() / 1000),
       latest_torrent: {
         ...data.latest_torrent,
+        size: Number(data.latest_torrent.size),
         created_at: Math.floor(
           new Date(data.latest_torrent.created_at).getTime() / 1000,
         ),

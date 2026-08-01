@@ -5,14 +5,15 @@ import { fail, getPreviewInfo } from "../../service";
 // Function to handle GET requests
 const handler = async (
   request: Request,
-  { params }: { params: { hash64: string; id: number } },
+  { params }: { params: Promise<{ hash64: string; id: string }> },
 ) => {
   try {
-    const linkInfo = await getPreviewInfo(params.hash64);
+    const { hash64, id } = await params;
+    const linkInfo = await getPreviewInfo(hash64);
 
     const screenshots = linkInfo.screenshots?.map((item) => item.screenshot);
 
-    const imageUrl = screenshots?.[params.id];
+    const imageUrl = screenshots?.[Number(id)];
 
     if (!imageUrl) {
       return fail("Image not found", 404);

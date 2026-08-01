@@ -4,15 +4,14 @@ import { Link } from "@nextui-org/react";
 
 import { SearchInput } from "@/components/SearchInput";
 import SearchResultsList from "@/components/SearchResultsList";
-import apiFetch from "@/utils/api";
 import { MagnetIcon } from "@/components/icons";
 import { siteConfig } from "@/config/site";
+import { search } from "@/app/api/graphql/service";
 import {
   DEFAULT_SORT_TYPE,
   SEARCH_PAGE_SIZE,
   DEFAULT_FILTER_TIME,
   DEFAULT_FILTER_SIZE,
-  SEARCH_PAGE_MAX,
 } from "@/config/constant";
 
 type SearchParams = {
@@ -33,9 +32,6 @@ type SearchRequestType = {
   filterSize?: string;
 };
 
-let cachedSearchOption: SearchParams | null = null;
-let totalCount = 0;
-
 // Fetch data from the API based on search parameters
 async function fetchData({
   keyword,
@@ -45,46 +41,19 @@ async function fetchData({
   filterTime,
   filterSize,
 }: SearchRequestType): Promise<any> {
-  const params = new URLSearchParams({
-    keyword,
-    limit: String(limit),
-    offset: String(offset),
-  });
-
-  if (sortType) params.set("sortType", sortType);
-  if (filterTime) params.set("filterTime", filterTime);
-  if (filterSize) params.set("filterSize", filterSize);
-
-  // Check if it is a new search
-  const isNewSearch =
-    !cachedSearchOption ||
-    keyword !== cachedSearchOption.keyword ||
-    filterTime !== cachedSearchOption.filterTime ||
-    filterSize !== cachedSearchOption.filterSize;
-
-  if (isNewSearch) {
-    cachedSearchOption = null; // Reset cachedSearchOption for new search
-  } else {
-    params.set("withTotalCount", "0");
-  }
-
   try {
-    const resp = await apiFetch(`/api/search?${params.toString()}`, {
-      next: { revalidate: 60 * 60 * 6 }, // cache for 6 hours
+    const data = await search(null, {
+      queryInput: {
+        keyword,
+        limit,
+        offset,
+        sortType,
+        filterTime,
+        filterSize,
+      },
     });
 
-    if (isNewSearch) {
-      totalCount = resp.data.total_count;
-    }
-    cachedSearchOption = {
-      keyword,
-      sortType,
-      filterTime,
-      filterSize,
-      p: cachedSearchOption?.p,
-    };
-
-    return resp;
+    return { data };
   } catch (error: any) {
     console.error(error);
 
@@ -94,10 +63,11 @@ async function fetchData({
 
 // Generate metadata for the search page
 export async function generateMetadata({
-  searchParams: { keyword },
+  searchParams,
 }: {
-  searchParams: { keyword: string };
+  searchParams: Promise<{ keyword: string }>;
 }): Promise<Metadata> {
+  const { keyword } = await searchParams;
   const t = await getTranslations();
 
   return {
@@ -107,12 +77,9 @@ export async function generateMetadata({
 
 // Get search options from the search parameters
 function getSearchOption(searchParams: SearchParams) {
-  const isNewSearch =
-    !cachedSearchOption || searchParams.keyword !== cachedSearchOption.keyword;
-
   return {
     keyword: searchParams.keyword,
-    p: isNewSearch ? 1 : Number(searchParams.p) || 1,
+    p: Number(searchParams.p) || 1,
     ps: searchParams.ps || SEARCH_PAGE_SIZE,
     sortType: searchParams.sortType || DEFAULT_SORT_TYPE,
     filterTime: searchParams.filterTime || DEFAULT_FILTER_TIME,
@@ -124,9 +91,9 @@ function getSearchOption(searchParams: SearchParams) {
 export default async function SearchPage({
   searchParams,
 }: {
-  searchParams: SearchParams;
+  searchParams: Promise<SearchParams>;
 }) {
-  const searchOption = getSearchOption(searchParams);
+  const searchOption = getSearchOption(await searchParams);
 
   const start_time = Date.now();
   const { data } = await fetchData({
@@ -155,8 +122,9 @@ export default async function SearchPage({
         cost_time={cost_time}
         keywords={data.keywords}
         resultList={data.torrents}
+        has_more={data.has_more}
         searchOption={searchOption}
-        total_count={totalCount}
+        total_count={data.total_count}
       />
     </div>
   );

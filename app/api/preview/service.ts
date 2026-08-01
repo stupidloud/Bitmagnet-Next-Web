@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { base64ToHex, getLinkInfoFromWhatsLink } from '@/utils';
+import { base64ToHex, getLinkInfoFromWhatsLink } from "@/utils";
 
 export const fail = (message: string, status: number = 500) => {
   return NextResponse.json(

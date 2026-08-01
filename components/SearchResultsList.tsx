@@ -3,24 +3,27 @@ import { useRouter } from "next/navigation";
 import { Pagination, Select, SelectItem } from "@nextui-org/react";
 import { useTranslations } from "next-intl";
 import { useIsSSR } from "@react-aria/ssr";
+import { useEffect, useState } from "react";
 
 import SearchResultsItem from "./SearchResultsItem";
 
 import { SearchResultsListProps } from "@/types";
 import { $env } from "@/utils";
-import { SEARCH_PARAMS, SEARCH_PAGE_MAX } from "@/config/constant";
+import { SEARCH_PARAMS } from "@/config/constant";
 
 export default function SearchResultsList({
   resultList,
   keywords,
   cost_time = 0,
-  total_count = 0,
+  total_count = null,
+  has_more = false,
   searchOption,
 }: {
   resultList: SearchResultsListProps["torrents"];
   keywords: string[];
   cost_time: number;
-  total_count: number;
+  total_count: number | null;
+  has_more: boolean;
   searchOption: {
     keyword: string;
     p: number;
@@ -33,6 +36,50 @@ export default function SearchResultsList({
   const router = useRouter();
   const isSSR = useIsSSR();
   const t = useTranslations();
+  const [resolvedTotalCount, setResolvedTotalCount] = useState<number | null>(
+    total_count,
+  );
+
+  useEffect(() => {
+    setResolvedTotalCount(total_count);
+
+    if (total_count !== null) {
+      return;
+    }
+
+    const controller = new AbortController();
+    const params = new URLSearchParams();
+
+    params.set("keyword", searchOption.keyword);
+    params.set("sortType", searchOption.sortType);
+    params.set("filterTime", searchOption.filterTime);
+    params.set("filterSize", searchOption.filterSize);
+
+    fetch(`/api/search/count?${params.toString()}`, {
+      signal: controller.signal,
+    })
+      .then((response) => response.json())
+      .then((response) => {
+        const count = response?.data?.total_count;
+
+        if (typeof count === "number") {
+          setResolvedTotalCount(count);
+        }
+      })
+      .catch((error) => {
+        if (error?.name !== "AbortError") {
+          console.error(error);
+        }
+      });
+
+    return () => controller.abort();
+  }, [
+    searchOption.keyword,
+    searchOption.sortType,
+    searchOption.filterTime,
+    searchOption.filterSize,
+    total_count,
+  ]);
 
   const handleFilterChange = (type: string, value: string) => {
     const updatedSearchOption = {
@@ -72,7 +119,12 @@ export default function SearchResultsList({
 
   const pagiConf = {
     page: searchOption.p,
-    total: Math.ceil(total_count / searchOption.ps),
+    total:
+      resolvedTotalCount !== null
+        ? Math.ceil(resolvedTotalCount / searchOption.ps)
+        : has_more
+          ? searchOption.p + 1
+          : searchOption.p,
     siblinds: $env.isMobile ? 1 : 3,
   };
 
@@ -118,7 +170,9 @@ export default function SearchResultsList({
       </div>
 
       <div className="text-sm text-gray-500 mb-4">
-        {t("Search.results_found", { count: total_count })}
+        {resolvedTotalCount !== null
+          ? t("Search.results_found", { count: resolvedTotalCount })
+          : t("Search.results_counting")}
 
         {cost_time > 0 && (
           <span className="ml-1 text-xs">
