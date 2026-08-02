@@ -319,6 +319,24 @@ function buildKeywordBranches(
   };
 }
 
+// '%x%' 的选择性靠 torrents.name 上的直方图 (101 个边界值 + 3 个 MCV) 估算。能落进
+// 直方图的高频词估得相当准 (1080p 3.27e6 / mp4 4.58e6 / x264 1.96e6), 但落不进的
+// pattern 一律退到同一个下限: 实测真实匹配 0 条 (zzzqqqxxxvvv) 与 4469 条
+// (documentary) 都预估 3236 行, 即 1e-4 选择性, 估算器在此之下没有分辨率。
+//
+// 具体的作品名几乎都落在这个下限区间, 中日韩 / 西里尔 / 变音拉丁关键词尤甚 ——
+// 真实匹配通常只有几十到几百条, 被高估几十上百倍后, 规划器认为沿
+// torrents_created_at_desc_idx 倒序扫一小段就能凑够 LIMIT 行, 实际并行扫掉上千万行
+// (实测 1.3s ~ 8.3s)。而高频英文词估算准确且匹配密集, 走 created_at 那条路反而最快,
+// 所以只对含非 ASCII 字符的关键词改变查询形状。
+const NON_ASCII_REGEX = /[^\p{ASCII}]/u;
+
+function hasNonAsciiKeyword(keywordGroups: SearchKeywordGroup[]) {
+  return keywordGroups.some(({ keywords }) =>
+    keywords.some((keyword) => NON_ASCII_REGEX.test(keyword)),
+  );
+}
+
 function buildSearchSql({
   keywordGroups,
   sortType,
@@ -354,21 +372,35 @@ function buildSearchSql({
   LIMIT $${limitParamIndex}    -- 返回数量
   OFFSET $${offsetParamIndex}   -- 分页偏移`;
 
-  // 单分支时保持原有形状, 让 LIMIT 直接下推到表扫描
-  // 多分支时先 UNION 去重 (同一条记录可能同时命中多个变体), 再排序分页
-  const filteredCte =
-    branches.length === 1
-      ? `filtered AS (
-${buildBranch(branches[0])}
-${paginate()}
-)`
-      : `matched AS (
-${branches.map(buildBranch).join("\n  UNION\n")}
+  // 先把过滤集落地成 matched, 再在外层排序分页, 规划器就无法把 LIMIT 下推到
+  // created_at 索引扫描上
+  const buildMatchedCte = (inner: string, materialized: boolean) =>
+    `matched AS ${materialized ? "MATERIALIZED " : ""}(
+${inner}
 ),
 filtered AS (
   SELECT * FROM matched
 ${paginate("matched")}
 )`;
+
+  let filteredCte;
+
+  if (branches.length > 1) {
+    // 多分支: UNION 去重 (同一条记录可能同时命中多个变体), 其本身即为物化边界
+    filteredCte = buildMatchedCte(
+      branches.map(buildBranch).join("\n  UNION\n"),
+      false,
+    );
+  } else if (hasNonAsciiKeyword(keywordGroups)) {
+    // 非 ASCII 关键词: 显式物化, 强制先走 GIN 索引筛出候选集
+    filteredCte = buildMatchedCte(buildBranch(branches[0]), true);
+  } else {
+    // 其余情况保持原有形状, 让 LIMIT 直接下推到表扫描
+    filteredCte = `filtered AS (
+${buildBranch(branches[0])}
+${paginate()}
+)`;
+  }
 
   return `
 -- 先查到符合过滤条件的数据
