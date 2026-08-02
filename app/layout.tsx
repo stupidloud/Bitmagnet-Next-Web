@@ -1,6 +1,6 @@
 import "@/styles/globals.css";
 import { Metadata, Viewport } from "next";
-import { GoogleAnalytics } from "@next/third-parties/google";
+import Script from "next/script";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import clsx from "clsx";
@@ -73,7 +73,26 @@ export default async function RootLayout({
             </div>
           </Providers>
         </NextIntlClientProvider>
-        {gaId ? <GoogleAnalytics gaId={gaId} /> : null}
+        {gaId ? (
+          <>
+            {/* 初始化用 beforeInteractive: App Router 会把它序列化进 self.__next_s,
+                在 React 水合之前按序执行完, 保证组件 effect 里 window.gtag 一定已就绪。
+                体积只有几百字节, 远端的 gtag.js 仍按 afterInteractive 延后加载。 */}
+            <Script
+              // eslint-disable-next-line react/no-danger
+              dangerouslySetInnerHTML={{
+                __html: `window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments)}gtag('js',new Date());gtag('config','${gaId}');`,
+              }}
+              id="ga-init"
+              strategy="beforeInteractive"
+            />
+            <Script
+              id="ga-script"
+              src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
+              strategy="afterInteractive"
+            />
+          </>
+        ) : null}
       </body>
     </html>
   );

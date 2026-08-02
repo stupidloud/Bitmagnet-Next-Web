@@ -11,6 +11,18 @@ import { SearchResultsListProps } from "@/types";
 import { $env } from "@/utils";
 import { SEARCH_PARAMS } from "@/config/constant";
 
+declare global {
+  interface Window {
+    gtag?: (...args: unknown[]) => void;
+  }
+}
+
+// gtag 由 app/layout.tsx 里 beforeInteractive 的初始化脚本定义, 水合前就已就绪;
+// 未配置 NEXT_PUBLIC_GA_ID 时它不存在, 可选调用直接跳过
+const trackEvent = (name: string, params: Record<string, unknown>) => {
+  window.gtag?.("event", name, params);
+};
+
 export default function SearchResultsList({
   resultList,
   keywords,
@@ -40,6 +52,27 @@ export default function SearchResultsList({
     total_count,
   );
 
+  // 上报搜索词与服务端耗时, 每次搜索条件或翻页变化时触发一次
+  useEffect(() => {
+    if (!cost_time) {
+      return;
+    }
+
+    trackEvent("search", {
+      search_term: searchOption.keyword,
+      search_cost_time: cost_time,
+      search_sort_type: searchOption.sortType,
+      search_page: searchOption.p,
+    });
+  }, [
+    searchOption.keyword,
+    searchOption.sortType,
+    searchOption.filterTime,
+    searchOption.filterSize,
+    searchOption.p,
+    cost_time,
+  ]);
+
   useEffect(() => {
     setResolvedTotalCount(total_count);
 
@@ -55,6 +88,8 @@ export default function SearchResultsList({
     params.set("filterTime", searchOption.filterTime);
     params.set("filterSize", searchOption.filterSize);
 
+    const countStartTime = Date.now();
+
     fetch(`/api/search/count?${params.toString()}`, {
       signal: controller.signal,
     })
@@ -62,9 +97,16 @@ export default function SearchResultsList({
       .then((response) => {
         const count = response?.data?.total_count;
 
-        if (typeof count === "number") {
-          setResolvedTotalCount(count);
+        if (typeof count !== "number") {
+          return;
         }
+
+        setResolvedTotalCount(count);
+        trackEvent("search_count", {
+          search_term: searchOption.keyword,
+          count_cost_time: Date.now() - countStartTime,
+          total_count: count,
+        });
       })
       .catch((error) => {
         if (error?.name !== "AbortError") {
