@@ -47,7 +47,15 @@ export default async function RootLayout({
 
   return (
     <html suppressHydrationWarning lang={locale}>
-      <head />
+      <head>
+        {/* 浏览器靠这个 link 自动发现 OpenSearch 描述文档, title 需与其 ShortName 一致 */}
+        <link
+          href="/opensearch.xml"
+          rel="search"
+          title={siteConfig.shortName}
+          type="application/opensearchdescription+xml"
+        />
+      </head>
       <body
         className={clsx(
           "h-full bg-background font-sans antialiased",
